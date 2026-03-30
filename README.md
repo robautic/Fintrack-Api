@@ -2,6 +2,10 @@
 
 API REST para controle de transações financeiras pessoais, construída com uma stack moderna de Node.js.
 
+## Deploy
+
+API disponível em: https://api-financeira-nodejs.onrender.com
+
 ## Tecnologias
 
 | Ferramenta | Finalidade |
