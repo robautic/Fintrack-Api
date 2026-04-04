@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import { authenticate } from '../plugins/authenticate.js'
-import { processCategorizationBackground } from '../services/categorization.service'
+import { processCategorizationBackground } from '../services/ai.service'
 
 export async function transactionsRoutes(app: FastifyInstance) {
   app.get(

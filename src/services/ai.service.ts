@@ -1,4 +1,5 @@
 import { groqClient } from '../lib/groq'
+import { knex } from '../database'
 
 export async function categorizeTransaction(
   description: string,
@@ -20,7 +21,18 @@ export async function categorizeTransaction(
     ],
   })
 
-  const category = completion.choices[0]?.message?.content?.trim() ?? 'outros'
+  return completion.choices[0]?.message?.content?.trim() ?? 'outros'
+}
 
-  return category
+export async function processCategorizationBackground(
+  transactionId: string,
+  description: string,
+) {
+  try {
+    const category = await categorizeTransaction(description)
+    await knex('transactions').where({ id: transactionId }).update({ category })
+    console.log(`[AI] Transaction ${transactionId} categorized as: ${category}`)
+  } catch (error) {
+    console.log(`[AI] Error categorizing transaction ${transactionId}:`, error)
+  }
 }
