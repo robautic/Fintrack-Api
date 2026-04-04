@@ -17,7 +17,7 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(201).send({ user })
     } catch (err) {
       if (err === 'EMAIL_TAKEN') {
-        return reply.status(409).send({ error: 'Email já cadastrado' })
+        return reply.status(409).send({ error: 'Email already registered' })
       }
       throw err
     }
@@ -41,7 +41,7 @@ export async function authRoutes(app: FastifyInstance) {
       })
       return { accessToken }
     } catch {
-      return reply.status(401).send({ error: 'Credenciais inválidas' })
+      return reply.status(401).send({ error: 'Invalid credentials' })
     }
   })
 
@@ -49,7 +49,7 @@ export async function authRoutes(app: FastifyInstance) {
     const token = request.cookies.refreshToken
 
     if (!token) {
-      return reply.status(401).send({ error: 'refresh token não encontrado' })
+      return reply.status(401).send({ error: 'Refresh token not found' })
     }
 
     try {
@@ -66,7 +66,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       return { accessToken }
     } catch {
-      return reply.status(401).send({ error: 'Refresh token inválido' })
+      return reply.status(401).send({ error: 'Invalid refresh token' })
     }
   })
 }

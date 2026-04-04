@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import { authenticate } from '../plugins/authenticate.js'
+import { processCategorizationBackground } from '../services/categorization.service'
 
 export async function transactionsRoutes(app: FastifyInstance) {
   app.get(
@@ -77,16 +78,20 @@ export async function transactionsRoutes(app: FastifyInstance) {
       const { title, amount, type } = createTransactionBodySchema.parse(
         request.body,
       )
+      const [newTransaction] = await knex('transactions')
+        .insert({
+          id: randomUUID(),
+          title,
+          amount: type === 'credit' ? amount : amount * -1,
+          category: 'pendente',
+          user_id: (request.user as { id: string }).id,
+        })
 
-      const userId = (request.user as { id: string }).id
+        .returning('*')
 
-      await knex('transactions').insert({
-        id: randomUUID(),
-        title,
-        amount: type === 'credit' ? amount : amount * -1,
-        user_id: userId,
-      })
-      return reply.status(201).send()
+      processCategorizationBackground(newTransaction.id, title)
+
+      return reply.status(201).send(newTransaction)
     },
   )
 }
