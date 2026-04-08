@@ -231,7 +231,9 @@ export async function transactionsRoutes(app: FastifyInstance) {
                 .send({ error: 'No user found for automation' })
             }
             console.log('[preHandler] Usuario encontrado:', userRef.id)
-            ;(request as any).user = { id: userRef.id }
+            ;(request as typeof request & { user: { id: string } }).user = {
+              id: userRef.id,
+            }
             return
           } catch (err) {
             console.error('[preHandler] Erro ao buscar usuario:', err)
