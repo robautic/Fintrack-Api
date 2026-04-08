@@ -6,7 +6,7 @@ import { authenticate } from '../plugins/authenticate.js'
 import { processCategorizationBackground } from '../services/ai.service'
 
 export async function transactionsRoutes(app: FastifyInstance) {
-  // Rotas de configuração do usuário (saldo inicial) – mantidas para possível uso futuro
+  // Rotas de configuração do usuário (saldo inicial)
   app.get('/config', { preHandler: [authenticate] }, async (request) => {
     const userId = (request.user as { id: string }).id
     const config = await knex('user_config').where({ user_id: userId }).first()
@@ -46,86 +46,104 @@ export async function transactionsRoutes(app: FastifyInstance) {
   app.get(
     '/metrics/summary',
     { preHandler: [authenticate] },
-    async (request) => {
-      const userId = (request.user as { id: string }).id
+    async (request, reply) => {
+      try {
+        const userId = (request.user as { id: string }).id
 
-      if (!userId) {
-        return {
-          balance: 0,
-          totalIncome: 0,
-          totalExpenses: 0,
-          categories: [],
-          evolution: [],
+        if (!userId) {
+          return {
+            balance: 0,
+            totalIncome: 0,
+            totalExpenses: 0,
+            categories: [],
+            evolution: [],
+          }
         }
-      }
 
-      // Filtros de mês e ano via query string
-      const { month, year } = request.query as { month?: string; year?: string }
+        const { month, year } = request.query as {
+          month?: string
+          year?: string
+        }
 
-      // Base query com filtro de data (se fornecido)
-      let baseQuery = knex('transactions').where('user_id', userId)
-      if (month && year) {
-        baseQuery = baseQuery.whereRaw(
-          "strftime('%m', created_at) = ? AND strftime('%Y', created_at) = ?",
-          [month.padStart(2, '0'), year],
-        )
-      }
+        let baseQuery = knex('transactions').where('user_id', userId)
+        if (month && year) {
+          const client = knex.client.config.client
+          if (client === 'pg') {
+            // PostgreSQL
+            baseQuery = baseQuery.whereRaw(
+              'EXTRACT(MONTH FROM created_at) = ? AND EXTRACT(YEAR FROM created_at) = ?',
+              [month, year],
+            )
+          } else {
+            // SQLite (desenvolvimento)
+            baseQuery = baseQuery.whereRaw(
+              "strftime('%m', created_at) = ? AND strftime('%Y', created_at) = ?",
+              [month.padStart(2, '0'), year],
+            )
+          }
+        }
 
-      const stats = await baseQuery
-        .clone()
-        .select(
-          knex.raw(
-            'SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as totalIncome',
-          ),
-          knex.raw(
-            'SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) as totalExpenses',
-          ),
-          knex.raw('SUM(amount) as balance'),
-        )
-        .first()
+        const stats = await baseQuery
+          .clone()
+          .select(
+            knex.raw(
+              'SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as "totalIncome"',
+            ),
+            knex.raw(
+              'SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) as "totalExpenses"',
+            ),
+            knex.raw('SUM(amount) as balance'),
+          )
+          .first()
 
-      interface CategoryResult {
-        category: string
-        total: number
-      }
+        interface CategoryResult {
+          category: string
+          total: number
+        }
 
-      const categories = (await baseQuery
-        .clone()
-        .where('amount', '<', 0)
-        .select('category')
-        .sum({ total: 'amount' })
-        .groupBy('category')) as unknown as CategoryResult[]
+        const categories = (await baseQuery
+          .clone()
+          .where('amount', '<', 0)
+          .select('category')
+          .sum({ total: 'amount' })
+          .groupBy('category')) as unknown as CategoryResult[]
 
-      interface EvolutionResult {
-        date: string
-        amount: number
-      }
+        interface EvolutionResult {
+          date: string
+          amount: number
+        }
 
-      const evolution = (await baseQuery
-        .clone()
-        .select(knex.raw('DATE(created_at) as date'))
-        .sum({ amount: 'amount' })
-        .groupBy('date')
-        .orderBy('date', 'asc')) as unknown as EvolutionResult[]
+        const evolution = (await baseQuery
+          .clone()
+          .select(knex.raw('DATE(created_at) as date'))
+          .sum({ amount: 'amount' })
+          .groupBy('date')
+          .orderBy('date', 'asc')) as unknown as EvolutionResult[]
 
-      const totalIncome = Number(stats?.totalIncome || 0)
-      const totalExpenses = Number(stats?.totalExpenses || 0) // já é negativo
+        const totalIncome = Number(stats?.totalIncome || 0)
+        const totalExpenses = Number(stats?.totalExpenses || 0) // já é negativo
+        const currentBalance = totalIncome + totalExpenses
 
-      // Saldo atual = entradas - saídas
-      const currentBalance = totalIncome + totalExpenses
-
-      return {
-        balance: currentBalance,
-        totalIncome,
-        totalExpenses: Math.abs(totalExpenses),
-        categories: categories.map((c) => ({
-          category: c.category,
-          total: Math.abs(Number(c.total)),
-        })),
-        evolution: evolution.map((e) => ({
-          date: e.date,
-          amount: Number(e.amount), // evolução acumulada a partir do zero
-        })),
+        return {
+          balance: currentBalance,
+          totalIncome,
+          totalExpenses: Math.abs(totalExpenses),
+          categories: categories.map((c) => ({
+            category: c.category,
+            total: Math.abs(Number(c.total)),
+          })),
+          evolution: evolution.map((e) => ({
+            date: e.date,
+            amount: Number(e.amount),
+          })),
+        }
+      } catch (error) {
+        console.error('[metrics/summary] ERRO:', error)
+        return reply.status(500).send({
+          error: 'Internal server error',
+          reason: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        })
       }
     },
   )
@@ -213,9 +231,7 @@ export async function transactionsRoutes(app: FastifyInstance) {
                 .send({ error: 'No user found for automation' })
             }
             console.log('[preHandler] Usuario encontrado:', userRef.id)
-            ;(request as unknown as { user: { id: string } }).user = {
-              id: userRef.id,
-            }
+            ;(request as any).user = { id: userRef.id }
             return
           } catch (err) {
             console.error('[preHandler] Erro ao buscar usuario:', err)
