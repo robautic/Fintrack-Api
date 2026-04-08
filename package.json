@@ -4,12 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "knex": "node --import tsx ./node_modules/knex/bin/cli.js",
-    "lint": "eslint src --ext .ts --fix",
-    "build": "tsup src/server.ts --format esm --clean",
-    "test": "vitest"
-  },
+  "dev": "tsx watch src/server.ts",
+  "knex": "node --import tsx ./node_modules/knex/bin/cli.js",
+  "lint": "eslint src --ext .ts --fix",
+  "build": "tsup src/server.ts --format esm --clean",
+  "start": "node dist/server.js",
+  "test": "vitest"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
