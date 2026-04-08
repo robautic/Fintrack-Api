@@ -68,16 +68,11 @@ export async function authRoutes(app: FastifyInstance) {
       console.log('[POST /login] Login bem-sucedido, accessToken gerado.')
       return { accessToken }
     } catch (err) {
-      console.error('[POST /login] ERRO CAPTURADO:')
-      console.error(err)
-
-      if (err instanceof Error) {
-        console.error('[POST /login] Mensagem:', err.message)
-      }
-
+      console.error('[POST /login] ERRO CAPTURADO:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
       return reply.status(401).send({
         error: 'Invalid credentials',
-        message: err instanceof Error ? err.message : undefined,
+        reason: errorMessage,
       })
     }
   })
