@@ -1,10 +1,20 @@
-# Transactions API
+# Fintrack AI
 
-API REST para controle de transações financeiras pessoais, construída com uma stack moderna de Node.js.
+Sistema de controle financeiro pessoal que automatiza a captura de gastos via e-mail (Nubank e 99Pay), categoriza as transações com IA (Groq/Llama 3) e exibe tudo em um dashboard moderno.
+
+![Dashboard](public/screenshot.png)
 
 ## Deploy
 
-API disponível em: https://api-financeira-nodejs.onrender.com
+API: https://fintrack-api-a3by.onrender.com
+
+## Como funciona
+
+1. **Captura automática** — n8n monitora o Gmail a cada 5 minutos e detecta e-mails de gastos do Nubank e 99Pay
+2. **Processamento** — um workflow extrai título e valor do e-mail e envia para a API via HTTP Request
+3. **Categorização com IA** — a API recebe a transação e chama o Groq (Llama 3.3) em background para categorizar automaticamente
+4. **Anti-duplicata** — cada e-mail tem um `email_id` único que impede a mesma transação de entrar duas vezes
+5. **Dashboard** — tudo aparece em tempo real no frontend com gráficos, filtros por mês e lançamento manual
 
 ## Tecnologias
 
@@ -15,86 +25,84 @@ API disponível em: https://api-financeira-nodejs.onrender.com
 | Fastify | Framework HTTP |
 | Knex.js | Query builder SQL |
 | Zod | Validação de schemas |
-| SQLite | Banco de dados em desenvolvimento |
 | PostgreSQL | Banco de dados em produção |
-| Vitest + Supertest | Testes automatizados |
+| SQLite | Banco de dados em desenvolvimento |
+| JWT | Autenticação com access token + refresh token |
+| Groq / Llama 3.3 | Categorização de transações com IA |
+| n8n | Automação Gmail → API |
+| Chart.js | Gráficos no dashboard |
 
-## Funcionalidades
+## Rotas
 
-O controle de sessão é feito automaticamente via cookies (`sessionId`). Um identificador único é gerado na primeira transação e persistido nas requisições seguintes.
-
+### Autenticação
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| `POST` | `/transactions` | Cria uma nova transação |
-| `GET` | `/transactions` | Lista todas as transações da sessão atual |
-| `GET` | `/transactions/:id` | Retorna uma transação pelo ID |
-| `GET` | `/transactions/summary` | Retorna o saldo consolidado (créditos menos débitos) |
+| `POST` | `/auth/register` | Cadastro de usuário |
+| `POST` | `/auth/login` | Login, retorna accessToken |
+| `POST` | `/auth/refresh` | Renova o accessToken |
 
-**Corpo da requisição (POST):**
-```json
-{
-  "title": "Pagamento freelance",
-  "amount": 3000,
-  "type": "credit"
-}
-```
+### Transações
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/transactions` | Lista todas as transações |
+| `GET` | `/transactions/:id` | Busca transação por ID |
+| `GET` | `/transactions/summary` | Saldo consolidado |
+| `GET` | `/transactions/metrics/summary` | Métricas completas para o dashboard |
+| `POST` | `/transactions` | Cria transação (usado pelo n8n) |
+| `POST` | `/transactions/manual` | Lançamento manual via dashboard |
+| `DELETE` | `/transactions/:id` | Remove uma transação |
 
 ## Como executar
 
 **Pré-requisito:** Node.js >= 20.0.0
 
 ### 1. Instale as dependências
-
 ```bash
 npm install
 ```
 
 ### 2. Configure as variáveis de ambiente
 
-Crie um arquivo `.env` na raiz do projeto:
+Crie um arquivo `.env` na raiz:
 
 ```env
 NODE_ENV=development
 DATABASE_CLIENT=sqlite
 DATABASE_URL="./db/app.db"
-```
-
-Para testes, crie um arquivo `.env.test`:
-
-```env
-NODE_ENV=test
-DATABASE_CLIENT=sqlite
-DATABASE_URL="./db/test.db"
+JWT_ACCESS_SECRET=sua_chave_aqui
+JWT_REFRESH_SECRET=sua_chave_aqui
+GROQ_API_KEY=sua_chave_aqui
+FINTRACK_API_KEY=sua_chave_aqui
 ```
 
 ### 3. Execute as migrations
-
 ```bash
 npm run knex -- migrate:latest
 ```
 
 ### 4. Inicie o servidor
-
 ```bash
 npm run dev
 ```
 
-## Testes
+## Configuração do n8n
 
-```bash
-npm run test
-```
+O workflow do n8n realiza as seguintes etapas:
 
-Os testes utilizam um banco de dados isolado definido no `.env.test` e são executados com Vitest + Supertest.
+1. **Schedule Trigger** — executa a cada 5 minutos
+2. **Gmail** — busca e-mails não lidos com filtro `newer_than:1d from:noreply@99app.com OR from:nubank.com.br`
+3. **Code in JavaScript** — extrai título, valor e `email_id` do snippet do e-mail
+4. **HTTP Request** — envia `POST /transactions` com `x-api-key` no header
 
 ## Scripts
 
 | Comando | Descrição |
 |---------|-----------|
-| `npm run dev` | Inicia o servidor em modo desenvolvimento com hot reload via `tsx` |
-| `npm run build` | Compila o TypeScript para produção via `tsup` |
-| `npm run knex` | Executa comandos do Knex CLI via `tsx` |
-| `npm run lint` | Verifica e corrige o estilo do código com ESLint |
+| `npm run dev` | Inicia em modo desenvolvimento com hot reload |
+| `npm run build` | Compila TypeScript para produção via tsup |
+| `npm run start` | Inicia o servidor compilado |
+| `npm run knex` | Executa comandos do Knex CLI |
+| `npm run lint` | Verifica o código com ESLint |
 
 ## Licença
 
