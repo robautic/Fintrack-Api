@@ -15,7 +15,12 @@ export function buildApp() {
   const app = fastify()
 
   app.register(cors, {
-    origin: true,
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      /\.onrender\.com$/,
+      /\.vercel\.app$/,
+    ],
     credentials: true,
   })
 

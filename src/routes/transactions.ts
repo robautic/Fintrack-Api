@@ -6,7 +6,6 @@ import { authenticate } from '../plugins/authenticate.js'
 import { processCategorizationBackground } from '../services/ai.service'
 
 export async function transactionsRoutes(app: FastifyInstance) {
-  // Rotas de configuração do usuário (saldo inicial)
   app.get('/config', { preHandler: [authenticate] }, async (request) => {
     const userId = (request.user as { id: string }).id
     const config = await knex('user_config').where({ user_id: userId }).first()
@@ -30,6 +29,7 @@ export async function transactionsRoutes(app: FastifyInstance) {
     const userId = (request.user as { id: string }).id
     const transactions = await knex('transactions')
       .where('user_id', userId)
+      .orderBy('created_at', 'desc')
       .select()
     return { transactions }
   })
@@ -140,11 +140,17 @@ export async function transactionsRoutes(app: FastifyInstance) {
         return reply.status(500).send({
           error: 'Internal server error',
           reason: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined,
         })
       }
     },
   )
+
+  // ⚠️ ROTA TEMPORÁRIA — remover após limpar o banco
+  app.delete('/all', { preHandler: [authenticate] }, async (request, reply) => {
+    const userId = (request.user as { id: string }).id
+    await knex('transactions').where({ user_id: userId }).delete()
+    return reply.status(200).send({ message: 'Todas as transações deletadas' })
+  })
 
   app.post(
     '/manual',
@@ -167,6 +173,8 @@ export async function transactionsRoutes(app: FastifyInstance) {
           user_id: userId,
         })
         .returning('*')
+
+      processCategorizationBackground(transaction.id, title)
 
       return reply.status(201).send(transaction)
     },
@@ -203,51 +211,30 @@ export async function transactionsRoutes(app: FastifyInstance) {
     {
       preHandler: async (request, reply) => {
         const apiKey = request.headers['x-api-key']
-        console.log(
-          '[preHandler] API Key recebida:',
-          apiKey ? 'presente' : 'ausente',
-        )
-        console.log(
-          '[preHandler] N8N_USER_ID configurado:',
-          process.env.N8N_USER_ID,
-        )
 
         if (apiKey === process.env.FINTRACK_API_KEY) {
-          console.log('[preHandler] API Key valida, buscando usuario...')
           try {
             const userRef = await knex('users')
               .where({ email: 'valeskatkg@gmail.com' })
               .first()
 
             if (!userRef) {
-              console.error(
-                '[preHandler] Usuario nao encontrado para o email valeskatkg@gmail.com',
-              )
               return reply
                 .status(500)
                 .send({ error: 'No user found for automation' })
             }
-            console.log('[preHandler] Usuario encontrado:', userRef.id)
             ;(request as typeof request & { user: { id: string } }).user = {
               id: userRef.id,
             }
             return
           } catch (err) {
-            console.error('[preHandler] Erro ao buscar usuario:', err)
             return reply.status(500).send({ error: 'Database error' })
           }
         }
-        console.log(
-          '[preHandler] API Key invalida ou ausente, usando autenticacao JWT',
-        )
         return authenticate(request, reply)
       },
     },
     async (request, reply) => {
-      console.log(
-        '[POST /transactions] Body recebido:',
-        JSON.stringify(request.body, null, 2),
-      )
       const createTransactionBodySchema = z
         .object({
           title: z.string().optional(),
@@ -255,6 +242,7 @@ export async function transactionsRoutes(app: FastifyInstance) {
           amount: z.number(),
           type: z.enum(['credit', 'debit']).optional().default('debit'),
           category: z.string().optional(),
+          emailId: z.string().optional(),
         })
         .transform((data) => ({
           ...data,
@@ -262,15 +250,21 @@ export async function transactionsRoutes(app: FastifyInstance) {
         }))
 
       try {
-        const { title, amount, type, category } =
+        const { title, amount, type, category, emailId } =
           createTransactionBodySchema.parse(request.body)
 
-        console.log('[POST /transactions] Dados validados:', {
-          title,
-          amount,
-          type,
-          category,
-        })
+        // Checa duplicata pelo emailId
+        if (emailId) {
+          const existing = await knex('transactions')
+            .where({ email_id: emailId })
+            .first()
+          if (existing) {
+            console.log('[POST /transactions] Duplicata ignorada:', emailId)
+            return reply
+              .status(200)
+              .send({ skipped: true, message: 'Transação já processada' })
+          }
+        }
 
         const [newTransaction] = await knex('transactions')
           .insert({
@@ -279,37 +273,35 @@ export async function transactionsRoutes(app: FastifyInstance) {
             amount: type === 'credit' ? amount : amount * -1,
             category: category || 'pendente',
             user_id: (request.user as { id: string }).id,
+            email_id: emailId || null,
           })
           .returning('*')
 
-        console.log(
-          '[POST /transactions] Transacao inserida:',
-          newTransaction.id,
-        )
+        console.log('[POST /transactions] Inserida:', newTransaction.id, title)
 
-        console.log(
-          `[POST /transactions] Chamando processCategorizationBackground para ${newTransaction.id} com título "${title}"`,
-        )
+        // IA categoriza em background
         processCategorizationBackground(newTransaction.id, title)
 
-        fetch('http://localhost:5678/webhook-test/nova-transacao', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: newTransaction.id,
-            title,
-            amount: newTransaction.amount,
-            category: newTransaction.category,
-            userId: newTransaction.user_id,
-            createdAt: newTransaction.created_at,
-          }),
-        }).catch(() => {
-          console.log('[Webhook] n8n offline')
-        })
+        // Webhook n8n — só dispara se URL estiver configurada
+        const n8nUrl = process.env.N8N_WEBHOOK_URL
+        if (n8nUrl) {
+          fetch(n8nUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: newTransaction.id,
+              title,
+              amount: newTransaction.amount,
+              category: newTransaction.category,
+              userId: newTransaction.user_id,
+              createdAt: newTransaction.created_at,
+            }),
+          }).catch(() => console.log('[Webhook] n8n offline'))
+        }
 
         return reply.status(201).send(newTransaction)
       } catch (error) {
-        console.error('[POST /transactions] Erro ao processar:', error)
+        console.error('[POST /transactions] Erro:', error)
         if (error instanceof z.ZodError) {
           return reply.status(400).send({
             error: 'Validation error',
