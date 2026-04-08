@@ -27,7 +27,6 @@ export async function authRoutes(app: FastifyInstance) {
         console.error('[POST /register] Stack:', err.stack)
       }
 
-      // Se for erro do Zod, retorna 400
       if (err instanceof z.ZodError) {
         return reply.status(400).send({
           error: 'Validation error',
@@ -35,12 +34,10 @@ export async function authRoutes(app: FastifyInstance) {
         })
       }
 
-      // Se for EMAIL_TAKEN
       if (err instanceof Error && err.message === 'EMAIL_TAKEN') {
         return reply.status(409).send({ error: 'Email already registered' })
       }
 
-      // Erro genérico (500) com detalhes para debug
       return reply.status(500).send({
         error: 'Internal server error',
         message: err instanceof Error ? err.message : 'Unknown error',
@@ -53,9 +50,11 @@ export async function authRoutes(app: FastifyInstance) {
       email: z.string().email(),
       password: z.string(),
     })
-    const { email, password } = schema.parse(request.body)
 
     try {
+      const { email, password } = schema.parse(request.body)
+      console.log('[POST /login] Tentativa de login:', email)
+
       const { accessToken, refreshToken } = await loginUser(email, password)
 
       reply.setCookie('refreshToken', refreshToken, {
@@ -65,9 +64,21 @@ export async function authRoutes(app: FastifyInstance) {
         path: '/refresh',
         maxAge: 60 * 60 * 24 * 7,
       })
+
+      console.log('[POST /login] Login bem-sucedido, accessToken gerado.')
       return { accessToken }
-    } catch {
-      return reply.status(401).send({ error: 'Invalid credentials' })
+    } catch (err) {
+      console.error('[POST /login] ERRO CAPTURADO:')
+      console.error(err)
+
+      if (err instanceof Error) {
+        console.error('[POST /login] Mensagem:', err.message)
+      }
+
+      return reply.status(401).send({
+        error: 'Invalid credentials',
+        message: err instanceof Error ? err.message : undefined,
+      })
     }
   })
 
