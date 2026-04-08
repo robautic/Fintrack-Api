@@ -1,5 +1,5 @@
 /* global localStorage, alert, confirm, Chart */
-const API = 'http://localhost:3333'
+const API_URL = 'https://fintrack-api-a3by.onrender.com'
 
 // Paleta Clara Premium (Azul Corporativo, Verde Suave, Laranja, etc)
 const COLORS = [
@@ -125,7 +125,7 @@ loginBtn.addEventListener('click', async () => {
   const email = emailInput.value.trim()
   const password = passwordInput.value.trim()
   try {
-    const res = await fetch(`${API}/auth/login`, {
+    const res = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -151,11 +151,11 @@ async function loadData() {
   showLoading()
   const month = monthSelect.value
   const year = yearSelect.value
-  const metricsUrl = `${API}/transactions/metrics/summary?month=${month}&year=${year}`
+  const metricsUrl = `${API_URL}/transactions/metrics/summary?month=${month}&year=${year}`
   try {
     const [metricsRes, txRes] = await Promise.all([
       fetch(metricsUrl, { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`${API}/transactions`, {
+      fetch(`${API_URL}/transactions`, {
         headers: { Authorization: `Bearer ${token}` },
       }),
     ])
@@ -197,7 +197,7 @@ document.getElementById('add-manual').addEventListener('click', async () => {
     return
   }
   try {
-    const res = await fetch(`${API}/transactions/manual`, {
+    const res = await fetch(`${API_URL}/transactions/manual`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -216,7 +216,7 @@ document.getElementById('add-manual').addEventListener('click', async () => {
 
 async function deleteTransaction(id) {
   if (!confirm('Excluir esta transação?')) return
-  await fetch(`${API}/transactions/${id}`, {
+  await fetch(`${API_URL}/transactions/${id}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   })
