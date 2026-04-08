@@ -145,13 +145,6 @@ export async function transactionsRoutes(app: FastifyInstance) {
     },
   )
 
-  // ⚠️ ROTA TEMPORÁRIA — remover após limpar o banco
-  app.delete('/all', { preHandler: [authenticate] }, async (request, reply) => {
-    const userId = (request.user as { id: string }).id
-    await knex('transactions').where({ user_id: userId }).delete()
-    return reply.status(200).send({ message: 'Todas as transações deletadas' })
-  })
-
   app.post(
     '/manual',
     { preHandler: [authenticate] },
