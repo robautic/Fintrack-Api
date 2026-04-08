@@ -14,16 +14,14 @@ const __dirname = path.dirname(__filename)
 export function buildApp() {
   const app = fastify()
 
-  // 1. CORS primeiro
   app.register(cors, {
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: true,
     credentials: true,
   })
 
-  // 2. Arquivos estáticos (dashboard)
   app.register(fastifyStatic, {
     root: path.join(__dirname, '../public'),
-    prefix: '/dashboard/',
+    prefix: '/',
   })
 
   app.register(cookie)
