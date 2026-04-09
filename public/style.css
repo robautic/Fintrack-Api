@@ -58,3 +58,10 @@ select {
   background-position: right 1rem center;
   background-size: 1.2em;
 }
+/* Ajuste para os botões de aba */
+#tab-login, #tab-register {
+  transition: all 0.2s ease;
+}
+#tab-login.bg-slate-900, #tab-register.bg-slate-900 {
+  box-shadow: 0 4px 6px -2px rgba(0,0,0,0.05);
+}

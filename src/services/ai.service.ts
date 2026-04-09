@@ -16,7 +16,7 @@ export async function categorizeTransaction(
       messages: [
         {
           role: 'system',
-          content: `Você é um assistente de categorização financeira especialista em gastos brasileiros.
+          content: `Você é um assistente de categorização financeira especialista em gastos.
 Classifique a transação em APENAS UMA destas categorias:
 Alimentação, Transporte, Moradia, Lazer, Saúde, Educação, Serviços, Outros.
 
